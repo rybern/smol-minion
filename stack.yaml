@@ -16,4 +16,4 @@ flags: {}
 extra-package-dbs: []
 
 nix:
-  packages: [python27Packages.pomegranate, pkgconfig, cairo, zlib, gmp, ncurses, gcc]
+  packages: [pkgconfig, cairo, zlib, gmp, ncurses, gcc]

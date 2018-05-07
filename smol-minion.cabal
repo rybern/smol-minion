@@ -1,6 +1,6 @@
 name:                smol-minion
 version:             0.1.0.0
-homepage:            https://github.com/githubuser/prob-seq#readme
+homepage:            https://github.com/githubuser/smol-minion
 license:             BSD3
 license-file:        LICENSE
 author:              Ryan Bernstein
@@ -29,7 +29,7 @@ executable smol-minion
         -with-rtsopts=-N
   build-depends:       base >= 4.7 && < 5
                      , vector
-                     , prob-seq
+                     , smol
                      , parallel
                      , cassava
                      , bytestring
