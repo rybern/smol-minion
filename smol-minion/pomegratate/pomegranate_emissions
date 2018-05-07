@@ -1,0 +1,4 @@
+#python build_hmm.py ../../cycle_sim_transitions.st ../../cycle_sim_emissions.csv post.csv vit.csv
+#nix-shell -p pythonPackages.pomegranate --command "python build_hmm.py $@"
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+/run/current-system/sw/bin/nix-shell -p pythonPackages.pomegranate --command "python $DIR/build_hmm.py $1 $2 $3 $4"
