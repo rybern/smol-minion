@@ -1,0 +1,47 @@
+name:                smol-minion
+version:             0.1.0.0
+homepage:            https://github.com/githubuser/prob-seq#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Ryan Bernstein
+maintainer:          ryan.bernstein@columbia.edu
+copyright:           2017 Ryan Bernstein
+category:            Machine Learning
+build-type:          Simple
+cabal-version:       >=1.10
+extra-source-files:  README.md
+
+executable smol-minion
+  hs-source-dirs:      smol-minion
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  other-modules:       EmissionIO
+                     , Utils
+                     , EmissionPermutation
+                     , SNP
+                     , MinION
+                     , GeneralizedSNP
+                     , SubsampleFile
+  ghc-options:
+        -O2
+        -threaded
+        -rtsopts
+        -with-rtsopts=-N
+  build-depends:       base >= 4.7 && < 5
+                     , vector
+                     , prob-seq
+                     , parallel
+                     , cassava
+                     , bytestring
+                     , process
+                     , containers
+                     , temporary
+                     , Chart
+                     , Chart-cairo
+                     , sparse-lin-alg
+                     , time
+                     , shmm
+                     , hashable
+                     , monad-loops
+                     , scientific
+                     , smol
