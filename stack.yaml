@@ -2,15 +2,18 @@ resolver: lts-9.12
 
 packages:
 - '.'
-- ../shmm
-- ../smol
+- location: ../shmm
+  extra-dep: true
+- location: ../smol
+  extra-dep: true
 
 extra-deps: 
 - sparse-lin-alg-0.4.3
 - vector-0.12.0.0
 - eigen-2.1.7
-- shmm-1.0.0
-- smol-1.0.0
+# - shmm-1.0.0
+# - smol-1.0.0
+- containers-0.5.8.1
 
 flags: {}
 
