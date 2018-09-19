@@ -8,6 +8,7 @@ packages:
 extra-deps: 
 - sparse-lin-alg-0.4.3
 - vector-0.12.0.0
+- eigen-2.1.7
 - shmm-1.0.0
 - smol-1.0.0
 
@@ -16,4 +17,4 @@ flags: {}
 extra-package-dbs: []
 
 nix:
-  packages: [pkgconfig, cairo, zlib, gmp, ncurses, gcc]
+  packages: [eigen, pkgconfig, cairo, zlib, gmp, ncurses, gcc]

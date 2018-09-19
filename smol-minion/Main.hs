@@ -32,7 +32,8 @@ import Data.Hashable
 
 import Sequence.Matrix.ProbSeqMatrixUtils
 
-import Math.LinearAlgebra.Sparse.Matrix hiding (trans)
+--import Math.LinearAlgebra.Sparse.Matrix hiding (trans)
+import SparseMatrix hiding (trans)
 
 setupSiteAnalysis :: String -> String -> [String] -> FilePath
                   -> IO (FilePath, MatSeq (StateTree GenSNPState), Int, Int, Int, Emissions, [Site NT])
@@ -186,7 +187,7 @@ main''' = do
 
   let (flipped, regionFile, emissionsFile, referenceFile, outputFile) = case args of
         [flipped, regF, emiF, refF, outF] -> (flipped == "--flip", regF, emiF, refF, outF)
-        _ -> let dir = "test_data3/"
+        _ -> let dir = "test_data_bwd1/"
                  regionFile = dir ++ "region.csv"
                  emissionsFile = dir ++ "minion_post.csv"
                  referenceFile = dir ++ "reference.txt"

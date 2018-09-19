@@ -15,7 +15,8 @@ import Sequence.Matrix.ProbSeqMatrixUtils
 import Sequence.Matrix.IO.StateLabels
 import Data.Csv
 import qualified Data.ByteString.Lazy.Char8 as BS
-import Math.LinearAlgebra.Sparse.Matrix hiding (trans)
+--import Math.LinearAlgebra.Sparse.Matrix hiding (trans)
+import SparseMatrix hiding (trans)
 
 data GenSNPState = NoiseKey Int
                  | LeftFlank Int
