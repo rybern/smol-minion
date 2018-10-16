@@ -157,7 +157,7 @@ snpsMatSeq toJoinable (map toJoinable -> keyOrder) readStart readEnd (map (toJoi
         isSNP _ = Nothing
         snpIxs = catMaybes . zipWith (\i m -> (,i) <$> m) [0..] . map isSNP $ regions
 
-        tags = V.map snd . stateLabels $ matSeq
+        tags = V.map stateTag . stateLabels $ matSeq
         tagSNP snp allele (StateTag 0 [StateTag _ seqStates]) = flip any seqStates $ \seqState ->
           case seqState of
             (StateTag n [StateTag x _])  -> x == allele && n == snp

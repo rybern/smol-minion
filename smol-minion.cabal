@@ -22,6 +22,7 @@ executable smol-minion
                      , MinION
                      , GeneralizedSNP
                      , SubsampleFile
+                     , Plot
   ghc-options:
         -O2
         -threaded
@@ -29,7 +30,6 @@ executable smol-minion
         -with-rtsopts=-N
   build-depends:       base >= 4.7 && < 5
                      , vector
-                     , smol
                      , parallel
                      , cassava
                      , bytestring
@@ -40,8 +40,8 @@ executable smol-minion
                      , Chart-cairo
                      , sparse-lin-alg
                      , time
-                     , shmm
                      , hashable
                      , monad-loops
                      , scientific
+                     , smol-shmm
                      , smol

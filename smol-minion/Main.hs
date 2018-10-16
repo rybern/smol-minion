@@ -5,6 +5,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.List
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Csv
@@ -27,7 +29,9 @@ import EmissionIO
 import Utils
 import MinION
 import SubsampleFile
-import qualified SHMM as SHMM
+import SHMMInference
+import qualified Inference as IF
+import Sequence.Tags
 import Data.Hashable
 
 import Sequence.Matrix.ProbSeqMatrixUtils
@@ -36,17 +40,17 @@ import Sequence.Matrix.ProbSeqMatrixUtils
 import SparseMatrix hiding (trans)
 
 setupSiteAnalysis :: String -> String -> [String] -> FilePath
-                  -> IO (FilePath, MatSeq (StateTree GenSNPState), Int, Int, Int, Emissions, [Site NT])
+                  -> IO (FilePath, MatSeq (StateTree GenSNPState), Int, Int, Int, Emissions [NT], [Site NT])
 setupSiteAnalysis regionFile emissionsFile siteLines outputFile = do
   (_, emissionsStart, emissionsEnd) <- readRegionFile regionFile
   numEvents <- countFileLines emissionsFile
   let sites = map parseSite siteLines
   let genMS = genMatSeq
-  (Right emissions) <- readEmissions emissionsFile
+  (Right emissions) <- readMinIONEmissions emissionsFile
   return (outputFile, genMS, numEvents, emissionsStart, emissionsEnd, emissions, sites)
 
 setupSiteAnalysisArgs :: [String]
-                      -> IO (FilePath, MatSeq (StateTree GenSNPState), Int, Int, Int, Emissions, [Site NT])
+                      -> IO (FilePath, MatSeq (StateTree GenSNPState), Int, Int, Int, (Emissions [NT]), [Site NT])
 setupSiteAnalysisArgs args = do
   (regionFile, emissionsFile, siteLines, outputFile) <- case args of
     [regionFile, emissionsFile, sitesFile, outputFile] -> do
@@ -71,7 +75,7 @@ complement 'A' = 'T'
 complement 'T' = 'A'
 complement 'C' = 'G'
 
-writePosts :: (FilePath, MatSeq (StateTree GenSNPState), Int, Int, Int, Emissions, [Site NT])
+writePosts :: (FilePath, MatSeq (StateTree GenSNPState), Int, Int, Int, (Emissions [NT]), [Site NT])
            -> IO ()
 writePosts (outputFile, genMS, numEvents, emissionsStart, emissionsEnd, emissions, sites) = do
   forM_ sites $ \site -> do
@@ -120,11 +124,11 @@ main' = do
       siteLines = testLines
       outputFile = dir ++ "output.csv"
 
-  env@(outputFile, genMS, numEvents, emissionsStart, emissionsEnd, emissions, sites) <-
+  env@(outputFile, genMS, numEvents, emissionsStart, emissionsEnd, ems, sites) <-
     setupSiteAnalysis regionFile emissionsFile siteLines outputFile
   let x = 1
-      emissions' = V.map (normalize . regularize x) emissions
-      (minionIndexMap', emissions'') = addToken (1e-6) "_" minionIndexMap emissions'
+      emissions' = ems { emissions = V.map (normalize . regularize x) (emissions ems) }
+      emissions'' = addToken (1e-6) "_" emissions'
 
   ref <- readReference False referenceFile
 
@@ -140,14 +144,14 @@ main' = do
       nModel = nLabels `div` length models
       ixs = [[[i*nModel .. (i+1)*nModel-1] | i <- [0..length models-1]]]
 
-  [densities] <- runHMMSum' ixs minionIndexMap' emissions'' matSeq
+  [densities] <- runHMMSum' ixs emissions'' matSeq
   let probs = map (/ sum densities) densities
   print densities
   print probs
 
 alleleRefModelIxs :: Int -> Int -> Int -> (Vector Int, Vector Int)
 alleleRefModelIxs edgeFlankSize loc refLength = (alleleLabels 'B', alleleLabels 'D')
-  where ixLabels = V.imap (,) . V.map fst . stateLabels . buildMatSeq $ alleleRefModel edgeFlankSize loc 'D' (replicate loc 'A' ++ ['B'] ++ replicate (refLength - (loc + 1)) 'C')
+  where ixLabels = V.imap (,) . V.map stateLabel . stateLabels . buildMatSeq $ alleleRefModel edgeFlankSize loc 'D' (replicate loc 'A' ++ ['B'] ++ replicate (refLength - (loc + 1)) 'C')
         alleleLabels a = V.map fst $ V.filter (\(ix, nts) -> any (\nt -> nt == a) nts) ixLabels
 
 alleleRefModel :: Int -> Int -> NT -> [NT] -> ProbSeq [NT]
@@ -174,12 +178,12 @@ main'' = do
   env@(outputFile, genMS, numEvents, emissionsStart, emissionsEnd, emissions, sites) <-
     setupSiteAnalysis regionFile emissionsFile siteLines outputFile
 
-  let (minionIndexMap', emissions') = addToken (1e-6) "_" minionIndexMap emissions
+  let emissions' = addToken (1e-6) "_" emissions
 
   ref <- readReference False referenceFile
 
   let locs = [100, 200 .. 1800] :: [Int]
-  probs <- mapM (probRef minionIndexMap' emissions' ref) locs
+  probs <- mapM (probRef emissions' ref) locs
   print probs
 
 main''' = do
@@ -195,9 +199,9 @@ main''' = do
              in (True, regionFile, emissionsFile, referenceFile, outputFile)
 
   (_, emissionsStart, emissionsEnd) <- readRegionFile regionFile
-  (Right emissions) <- readEmissions emissionsFile
+  (Right ems) <- readMinIONEmissions emissionsFile
 
-  let (minionIndexMap', emissions') = addToken (1e-6) "_" minionIndexMap emissions
+  let emissions' = addToken (1e-6) "_" ems
 
   ref <- readReference False referenceFile
 
@@ -208,13 +212,14 @@ main''' = do
       matSeq = buildMatSeq model
 
       --ixs = fullSNPModelIxs flipped (emissionsStart, emissionsEnd) edgeFlankSize ref sites
-      ixs = fullSNPModelIxs' flipped (V.map snd . stateLabels $ matSeq)
+      ixs = fullSNPModelIxs' flipped (V.map stateTag . stateLabels $ matSeq)
 
       x = 1
-      emissions'' = V.map (normalize . regularize x) emissions'
+      emissions'' = emissions' { emissions = V.map (normalize . regularize x) (emissions emissions') }
+      --emissions'' = V.map (normalize . regularize x) emissions'
 
 
-  densities <- runHMMSum' ixs minionIndexMap' emissions'' matSeq
+  densities <- runHMMSum' ixs emissions'' matSeq
   let probs = map head $ map (\v -> map (/ sum v) v) densities
       outputStr = unlines . map show $ probs
 
@@ -297,17 +302,17 @@ fullSNPModelOrientedIxs flankSize ref sites =
           , minion . series $ regions
           , noiseModel flankSize
           ]
-        labels = V.map fst . stateLabels $ matSeq
+        labels = V.map stateLabel . stateLabels $ matSeq
         presentIxs nt = V.map fst . V.filter (\(ix, label) -> any (==nt) label) . V.imap (,) $ labels
 
-
+        
 testSNPs :: Int -> Int -> Int -> [NT] -> [(Int, NT, Prob)]
 testSNPs flank buffer emissionsStart ref = [ (emissionsStart + locus, complement (ref !! locus), 0.5)
                                            | locus <- loci]
   where loci = [flank + buffer, flank + 2 * buffer .. length ref - flank - buffer]
 
-probRef :: Map String Int -> Emissions -> [NT] -> Int -> IO Double
-probRef minionIndexMap' emissions' ref loc = do
+probRef :: Emissions [NT] -> [NT] -> Int -> IO Double
+probRef emissions' ref loc = do
   let edgeFlankSize = 50
       alt = complement (ref !! loc)
       model = alleleRefModel edgeFlankSize loc alt ref
@@ -316,12 +321,12 @@ probRef minionIndexMap' emissions' ref loc = do
       (refIxs, altIxs) = alleleRefModelIxs edgeFlankSize loc (length ref)
       ixs = [[refIxs, altIxs]]
 
-      nEmissions = V.length . V.head $ emissions'
+      nEmissions = V.length . V.head . emissions $ emissions'
       --emissions'' = V.map (V.map (const (1 / fromIntegral nEmissions))) emissions'
       x = 1
-      emissions'' = V.map (normalize . regularize x) emissions'
+      emissions'' = emissions' { emissions = V.map (normalize . regularize x) (emissions emissions') }
 
-  [densities] <- runHMMSum' ixs minionIndexMap' emissions'' matSeq
+  [densities] <- runHMMSum' ixs emissions'' matSeq
   let probs = map (/ sum densities) densities
   return $ head probs
 
@@ -378,8 +383,9 @@ probOfAlt [refP, altP] = (altP / (refP + altP))
 
 softFlank = 50
 
-siteEmissions :: Int -> Int -> Int -> Int -> Emissions -> Site a -> Emissions
-siteEmissions softFlank numEvents emissionsStart emissionsEnd emissions site = V.slice start length emissions
+siteEmissions :: Int -> Int -> Int -> Int -> Emissions [NT] -> Site a -> Emissions [NT]
+siteEmissions softFlank numEvents emissionsStart emissionsEnd ems site =
+  ems { emissions = V.slice start length (emissions ems)}
   where (start, length) = siteEmissionsBounds softFlank numEvents emissionsStart emissionsEnd site
 
 siteEmissionsBounds :: Int -> Int -> Int -> Int -> Site a -> (Int, Int)
@@ -389,12 +395,12 @@ siteEmissionsBounds softFlank numEvents emissionsStart emissionsEnd site =
         center = round (fromIntegral numEvents * proportion) - softFlank
 
 
-writeSNPPost :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> Emissions -> Site NT -> FilePath -> IO ()
-writeSNPPost genMS numEvents emissionsStart emissionsEnd emissions site outFile = do
+writeSNPPost :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> (Emissions [NT]) -> Site NT -> FilePath -> IO ()
+writeSNPPost genMS numEvents emissionsStart emissionsEnd ems site outFile = do
   -- let (matSeq, [[refIxs, altIxs]]) = specifyGenMatSeqNT genMS site
   let (matSeq, [[refIxs, altIxs]]) = snpsNTMatSeq emissionsStart emissionsEnd [site]  -- snpsNTMatSeq sites
 
-  post <- runHMM minionIndexMap emissions matSeq
+  post <- runHMM ems matSeq
 
   let refVec = V.map (\row -> sum $ V.map (row V.!) refIxs) post
       altVec = V.map (\row -> sum $ V.map (row V.!) altIxs) post
@@ -418,7 +424,7 @@ progressString start pnt end =
 
 
 
-testCallSNP :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> Emissions -> Site NT -> IO [Prob]
+testCallSNP :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> (Emissions [NT]) -> Site NT -> IO [Prob]
 testCallSNP genMS numEvents emissionsStart emissionsEnd emissions site = do
   let (matSeq, ixs) = specifyGenMatSeqNT genMS site  -- snpsNTMatSeq sites
 
@@ -434,7 +440,7 @@ testCallSNP genMS numEvents emissionsStart emissionsEnd emissions site = do
   let subEmissions = siteEmissions softFlank numEvents emissionsStart emissionsEnd emissions site
 
   ps <- iterateUntilDiffM $ do
-    ps <- runHMMSum' ixs minionIndexMap subEmissions matSeq
+    ps <- runHMMSum' ixs subEmissions matSeq
     hPutStrLn stderr $ "results: " ++ intercalate "," (map show ps)
     return ps
 
@@ -445,7 +451,7 @@ iterateUntilDiffM action = do
   comp <- action
   iterateWhile (/= comp) action
 
-callSNPs' :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> Emissions -> [Site NT] -> IO [Prob]
+callSNPs' :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> (Emissions [NT]) -> [Site NT] -> IO [Prob]
 callSNPs' genMS numEvents emissionsStart emissionsEnd emissions sites = do
   --let (matSeq, ixs) = specifyGenMatSeqNT genMS site  -- snpsNTMatSeq sites
   let (matSeq, ixs) = snpsNTMatSeq'' 10 "_" emissionsStart emissionsEnd sites  -- snpsNTMatSeq sites
@@ -459,26 +465,26 @@ callSNPs' genMS numEvents emissionsStart emissionsEnd emissions sites = do
 
   --let subEmissions = siteEmissions softFlank numEvents emissionsStart emissionsEnd emissions site
 
-  let (minionIndexMap', emissions') = addToken 0.1 "_" minionIndexMap emissions
+  let emissions' = addToken 0.1 "_" emissions
 
-  ps <- runHMMSum' ixs minionIndexMap' emissions' matSeq
+  ps <- runHMMSum' ixs emissions' matSeq
 
   return $ map probOfAlt ps
 
-addToken :: (Ord a) => Prob -> a -> Map a Int -> Emissions -> (Map a Int, Emissions)
-addToken p token indexMap emissions = (Map.insert token tokenIx indexMap, emissions')
+addToken :: (Ord a) => Prob -> a -> Emissions a -> Emissions a
+addToken p token (Emissions {..})= Emissions emissions' (Map.insert token tokenIx indexMap)
   where (tokenIx, emissions') = addEmissionsToken p emissions
 
 addTokenToIndexMap :: (Ord a) => a -> Map a Int -> Map a Int
 addTokenToIndexMap tokenKey indexMap = Map.insert tokenKey (Map.size indexMap) indexMap
 
-addEmissionsToken :: Prob -> Emissions -> (Int, Emissions)
+addEmissionsToken :: Prob -> VecMat -> (Int, VecMat)
 addEmissionsToken p emissions = ( V.length (V.head emissions)
                                 , V.map ((`V.snoc` p) . (((1-p)*) <$>)) emissions)
 
 
 
-callSNPs :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> Emissions -> [Site NT] -> IO [Prob]
+callSNPs :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> Emissions [NT] -> [Site NT] -> IO [Prob]
 callSNPs genMS numEvents emissionsStart emissionsEnd emissions sites = do
   --let (matSeq, ixs) = specifyGenMatSeqNT genMS site  -- snpsNTMatSeq sites
   let (matSeq, ixs) = snpsNTMatSeq emissionsStart emissionsEnd sites  -- snpsNTMatSeq sites
@@ -492,14 +498,14 @@ callSNPs genMS numEvents emissionsStart emissionsEnd emissions sites = do
 
   --let subEmissions = siteEmissions softFlank numEvents emissionsStart emissionsEnd emissions site
 
-  ps <- runHMMSum' ixs minionIndexMap emissions matSeq
+  ps <- runHMMSum' ixs emissions matSeq
 
   hPutStrLn stderr $ "results: " ++ intercalate "," (map show ps)
 
   return $ map probOfAlt ps
 
 
-callSNP :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> Emissions -> Site NT -> IO [Prob]
+callSNP :: MatSeq (StateTree GenSNPState) -> Int -> Int -> Int -> (Emissions [NT])-> Site NT -> IO [Prob]
 callSNP genMS numEvents emissionsStart emissionsEnd emissions site = do
   --let (matSeq, ixs) = specifyGenMatSeqNT genMS site  -- snpsNTMatSeq sites
   let (matSeq, ixs) = snpsNTMatSeq emissionsStart emissionsEnd [site]  -- snpsNTMatSeq sites
@@ -515,7 +521,7 @@ callSNP genMS numEvents emissionsStart emissionsEnd emissions site = do
 
   let subEmissions = siteEmissions softFlank numEvents emissionsStart emissionsEnd emissions site
 
-  ps <- runHMMSum' ixs minionIndexMap emissions matSeq
+  ps <- runHMMSum' ixs emissions matSeq
 
   hPutStrLn stderr $ "results: " ++ intercalate "," (map show ps)
 
@@ -525,36 +531,25 @@ instance Hashable a => Hashable (Vector a) where
   hashWithSalt = hashUsing V.toList
 
 runHMMSum' :: [[Vector Int]]
-           -> Map String Int
-           -> Emissions
+           -> Emissions [NT]
            -> MatSeq String
            -> IO [[Prob]]
-runHMMSum' ixs indexMap emissions priorSeq = do
-  let permutation = buildEmissionPerm indexMap priorSeq
-      triples = matSeqTriples priorSeq
-      ns = (nStates (trans priorSeq))
-  sums <- SHMM.shmmSummed ns triples emissions permutation
+runHMMSum' ixs emissions priorSeq = do
+  let (Posterior sumsMap) = posteriorSHMM
+        emissions
+        priorSeq
+      sums = V.generate (IntMap.size sumsMap) (fromJust . flip IntMap.lookup sumsMap)
   return $ map (map (sum . V.map (sums V.!))) ixs
 
-runHMMSum :: [[Vector Int]]
-          -> Map String Int
-          -> Emissions
-          -> MatSeq String
-          -> IO [[Prob]]
-runHMMSum ixs indexMap emissions priorSeq = mapIxs <$> runHMM indexMap emissions priorSeq
-  where mapIxs post = map (map (\arr -> stateProbs arr post)) ixs
+-- posteriorSHMM :: (Ord s, Show s) => Emissions s -> MatSeq s -> Posterior
 
-runHMM :: Map String Int
-       -> Emissions
+runHMM :: Emissions String
        -> MatSeq String
-       -> IO Emissions
-runHMM indexMap emissions priorSeq = SHMM.shmmFull (nStates (trans priorSeq)) triples emissions permutation
-  where permutation = buildEmissionPerm indexMap priorSeq
-        triples = matSeqTriples priorSeq
-
-matSeqTriples :: MatSeq a
-              -> [(Int, Int, Double)]
-matSeqTriples = map (\((r, c), p) -> (r - 1, c - 1, p)) . tail . toAssocList . cleanTrans . trans
+       -> IO VecMat
+runHMM emissions priorSeq = undefined
+  --SHMM.shmmFull (nStates (trans priorSeq)) triples emissions permutation
+  --where permutation = buildEmissionPerm indexMap priorSeq
+        --triples = matSeqTriples priorSeq
 
 {-
 callSNPs :: FilePath -> [Site NT] -> IO [Prob]
@@ -595,8 +590,8 @@ callSNP emissionsFile site = do
   return (altP / (refP + altP))
 -}
 
-stateProbs :: Vector Int -> Emissions -> Prob
-stateProbs ixs emissions = sum . V.map (\row -> sum . V.map (row V.!) $ ixs) $ emissions
+stateProbs :: Vector Int -> Emissions String -> Prob
+stateProbs ixs = sum . V.map (\row -> sum . V.map (row V.!) $ ixs) . emissions
 
 --main = compareSmall
 
@@ -667,7 +662,7 @@ compareHMM genSeq priorSeq f = do
 -}
 
 obsProb :: (Eq s) => MatSeq s -> s -> IO (Vector Prob)
-obsProb seq i = return . normalize . V.map (\(i', _) -> if i == i' then 1.0 else 0.0) . stateLabels $ seq
+obsProb seq i = return . normalize . V.map (\i' -> if i == i' then 1.0 else 0.0) . V.map stateLabel . stateLabels $ seq
 
 sampleCycleMatIxs :: IO (Vector Int)
 sampleCycleMatIxs = fst <$> sampleSeqIxs vecDist cycleMatSeq
@@ -753,9 +748,6 @@ reverseSite site = site {
 reverseSites :: [Site a] -> [Site a]
 reverseSites = reverse . map reverseSite
 
-  -- technician id number 1759
-  -- gustavo
-
 getFirstL :: [Maybe a] -> Maybe a
 getFirstL = getFirst . mconcat . map First
 
@@ -767,3 +759,6 @@ snd3 (_, b, _) = b
 
 thd3 :: (a, b, c) -> c
 thd3 (_, _, c) = c
+
+readMinIONEmissions :: FilePath -> IO (Either String (Emissions String))
+readMinIONEmissions = (((\ems -> Emissions ems minionIndexMap) <$>) <$>) . readMat

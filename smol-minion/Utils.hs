@@ -11,8 +11,8 @@ import EmissionIO
 import System.IO.Temp
 import System.IO
 
-normalize :: (Fractional a, Foldable t, Functor t) => t a -> t a
-normalize v = let s = sum v in (/ s) <$> v
+--normalize :: (Fractional a, Foldable t, Functor t) => t a -> t a
+--normalize v = let s = sum v in (/ s) <$> v
 
 groupOn :: (Foldable t, Ord b) => (a -> Maybe b) -> t a -> M.Map b [a]
 groupOn f t = foldl
@@ -31,7 +31,7 @@ withTempFiles n = go [] (map show [1..n])
 
 type StateDist s = V.Vector (Prob, (s, StateTag))
 
-pathProbs :: V.Vector (s, StateTag) -> Emissions -> V.Vector (StateDist s)
+pathProbs :: V.Vector (s, StateTag) -> VecMat -> V.Vector (StateDist s)
 pathProbs stateLabels = V.map (flip V.zip stateLabels)
 
 sumDist :: (Foldable t, Functor t) => t (Prob, (s, StateTag)) -> Prob

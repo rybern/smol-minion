@@ -68,7 +68,7 @@ genMatSeqIxs' :: Int -> (GenSNPState -> Bool) -> Vector Int
 genMatSeqIxs' flankSize pred =
     V.map fst
   . V.filter (any pred . snd)
-  . V.imap (\i v -> (i, fst v))
+  . V.imap (\i v -> (i, stateLabel v))
   $ stateLabels (genMatSeq' flankSize)
 
 genMatSeqAltIxs' flankSize = genMatSeqIxs' flankSize isAlt
@@ -113,7 +113,7 @@ specifyGenMatSeqNT' flankSize genMatSeq site =
   mapStates ntTreeToString $ specifyGenMatSeq (genMatSeq' flankSize) genMatSeqIxSets' keyOrder site
 
 setStateContains matSeq nt =
-  Set.fromList . map fst . filter (any (== nt) . fst . snd) . zip [1..] . V.toList . stateLabels $ matSeq
+  Set.fromList . map fst . filter (any (== nt) . stateLabel . snd) . zip [1..] . V.toList . stateLabels $ matSeq
 
 genMatSeqIxSets' = let refSet = setStateContains (genMatSeq' flankSize) Ref
                        altSet = setStateContains (genMatSeq' flankSize) Alt
@@ -160,7 +160,7 @@ updateSinkRatio (refSet, altSet, eitherSet) p ms = ms { trans = mapWithIxs updat
 
 allelePairs :: (MatSeq (StateTree GenSNPState), [[V.Vector Int]]) -> [(Int, Int)]
 allelePairs (genMs, [[refIxs, altIxs]]) = ixPairs
-  where ixStateTag ix = (snd . (stateLabels genMs V.!) $ ix, ix)
+  where ixStateTag ix = (stateTag . (stateLabels genMs V.!) $ ix, ix)
         ixStateTags = V.toList . V.map ixStateTag
         tagPairs = pairOff (tagPair `on` fst) (ixStateTags refIxs) (ixStateTags altIxs)
         ixPairs = map (\((_, i1), (_, i2)) -> (i1, i2)) tagPairs
@@ -195,9 +195,6 @@ site = exSite 0.35
 check ms = putStrLn $ show (trans ms # (100, 100))
 
 (ms, ixs) = specifyGenMatSeqNT genMatSeq site
-
-cleanTrans :: Trans -> Trans
-cleanTrans = addStartColumn . collapseEnds
 
 
 {-

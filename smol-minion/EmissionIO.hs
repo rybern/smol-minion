@@ -5,28 +5,20 @@ import qualified Data.Vector as V
 import Control.Monad (liftM)
 import Data.Csv
 import Sequence.Types
+import Sequence (VecMat)
 import qualified Data.ByteString.Lazy as BS
 
-type Emissions = Vector (Vector Prob)
-type DEmissions = Vector (Vector Double)
+encodeMat :: VecMat -> BS.ByteString
+encodeMat = encode . V.toList
 
-toDecimal :: Emissions -> DEmissions
-toDecimal = id -- V.map (V.map fromRational)
+writeMat :: VecMat -> FilePath -> IO ()
+writeMat emissions filepath = BS.writeFile filepath (encodeMat emissions)
 
-fromDecimal :: DEmissions -> Emissions
-fromDecimal = id --V.map (V.map toRational)
+decodeMat :: BS.ByteString -> Either String VecMat
+decodeMat = decode NoHeader
 
-encodeEmissions :: Emissions -> BS.ByteString
-encodeEmissions = encode . V.toList . toDecimal
-
-writeEmissions :: Emissions -> FilePath -> IO ()
-writeEmissions emissions filepath = BS.writeFile filepath (encodeEmissions emissions)
-
-decodeEmissions :: BS.ByteString -> Either String Emissions
-decodeEmissions = liftM fromDecimal . decode NoHeader
-
-readEmissions :: FilePath -> IO (Either String Emissions)
-readEmissions = liftM decodeEmissions . BS.readFile
+readMat :: FilePath -> IO (Either String VecMat)
+readMat = liftM decodeMat . BS.readFile
 
 decodeViterbi :: BS.ByteString -> Either String (Vector Int)
 decodeViterbi = liftM V.head . decode NoHeader
