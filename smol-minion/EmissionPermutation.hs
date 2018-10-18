@@ -5,7 +5,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Sequence
+import SMoL
 import Data.List
 import MinION
 

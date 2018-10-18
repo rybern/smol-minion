@@ -4,7 +4,7 @@ module Utils where
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Map as M
-import Sequence
+import SMoL
 import Data.Function
 import Data.List
 import EmissionIO

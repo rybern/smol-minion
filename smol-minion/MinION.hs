@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances, DeriveFoldable, DeriveFunctor #-}
 module MinION where
 
-import Sequence
+import SMoL
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.List

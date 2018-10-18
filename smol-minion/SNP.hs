@@ -6,7 +6,7 @@ import qualified Data.Vector as V
 import Data.Set (Set)
 import qualified Data.Set as S
 import Data.Maybe
-import Sequence
+import SMoL
 import MinION
 
 type NT = Char
@@ -24,10 +24,10 @@ data SNPCallerRegion a = SNP [(a, Prob)]
                        deriving Show
 
 regionProbSeq :: [a] -> SNPCallerRegion a -> ProbSeq a
-regionProbSeq keyOrder (SNP nts) = finiteDistOver . map (\(nt, p) -> (state nt, p)) $ nts
-regionProbSeq keyOrder (Flank nts) = series . map state $ nts
+regionProbSeq keyOrder (SNP nts) = finiteDistOver . map (\(nt, p) -> (symbol nt, p)) $ nts
+regionProbSeq keyOrder (Flank nts) = series . map symbol $ nts
 regionProbSeq keyOrder (Noise expected) = geometricRepeat (1 / (1 + fromIntegral expected)) noise
-  where noise = uniformDistOver (map state keyOrder)
+  where noise = uniformDistOver (map symbol keyOrder)
 
 regionsProbSeq :: [a] -> [SNPCallerRegion a] -> ProbSeq a
 regionsProbSeq keyOrder = series . map (regionProbSeq keyOrder)
@@ -123,9 +123,9 @@ snpsNTMatSeq = snpsMatSeq (\a -> [a]) keyOrder
 -- make generic module, type for each location in snp site region, make site-swapping half of the specifying function
 
 regionProbSeq' :: a -> SNPCallerRegion a -> ProbSeq a
-regionProbSeq' token (SNP nts) = finiteDistOver . map (\(nt, p) -> (state nt, p)) $ nts
-regionProbSeq' token (Flank nts) = series . map state $ nts
-regionProbSeq' token (Noise expected) = geometricRepeat (1 / (1 + avgEventsPerNT * fromIntegral expected)) (state token)
+regionProbSeq' token (SNP nts) = finiteDistOver . map (\(nt, p) -> (symbol nt, p)) $ nts
+regionProbSeq' token (Flank nts) = series . map symbol $ nts
+regionProbSeq' token (Noise expected) = geometricRepeat (1 / (1 + avgEventsPerNT * fromIntegral expected)) (symbol token)
 
 isNoise (Noise _) = True
 isNoise _ = False

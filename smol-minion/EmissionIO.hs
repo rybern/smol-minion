@@ -4,8 +4,8 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Control.Monad (liftM)
 import Data.Csv
-import Sequence.Types
-import Sequence (VecMat)
+import SMoL.Types
+import SMoL (VecMat)
 import qualified Data.ByteString.Lazy as BS
 
 encodeMat :: VecMat -> BS.ByteString

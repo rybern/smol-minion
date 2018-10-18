@@ -8,11 +8,11 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Sequence
+import SMoL
 import MinION
 
-import Sequence.Matrix.ProbSeqMatrixUtils
-import Sequence.Matrix.IO.StateLabels
+import SMoL.Matrix.ProbSeqMatrixUtils
+import SMoL.Matrix.IO.StateLabels
 import Data.Csv
 import qualified Data.ByteString.Lazy.Char8 as BS
 --import Math.LinearAlgebra.Sparse.Matrix hiding (trans)
@@ -76,7 +76,7 @@ genMatSeqRefIxs' flankSize = genMatSeqIxs' flankSize isRef
 
 endNoiseMatSeq :: String -> Int -> MatSeq [NT]
 endNoiseMatSeq token ((* avgEventsPerNT) . fromIntegral -> expected) = buildMatSeq
-  $ geometricRepeat (1 / (1+expected)) (state token)
+  $ geometricRepeat (1 / (1+expected)) (symbol token)
 
 snpsNTMatSeq'' :: Int -> String -> Int -> Int -> [Site NT] -> (MatSeq [NT], [[Vector Int]])
 snpsNTMatSeq'' flankSize token readStart readEnd sites =

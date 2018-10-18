@@ -15,7 +15,7 @@ import Control.Monad.Loops
 import Data.Monoid
 import Data.Maybe
 import Data.Char
-import Sequence
+import SMoL
 import Data.Function
 import System.Environment
 import System.IO
@@ -29,12 +29,12 @@ import EmissionIO
 import Utils
 import MinION
 import SubsampleFile
-import SHMMInference
-import qualified Inference as IF
-import Sequence.Tags
+import SMoL.Inference.SHMM
+import qualified SMoL.Inference as IF
+import SMoL.Tags
 import Data.Hashable
 
-import Sequence.Matrix.ProbSeqMatrixUtils
+import SMoL.Matrix.ProbSeqMatrixUtils
 
 --import Math.LinearAlgebra.Sparse.Matrix hiding (trans)
 import SparseMatrix hiding (trans)
@@ -93,15 +93,15 @@ writePosts (outputFile, genMS, numEvents, emissionsStart, emissionsEnd, emission
 
 seqModel :: Int -> [NT] -> ProbSeq [NT]
 seqModel flankSize ref = series [ flank
-                                , minion . series . map (state . return) $ trimmedRef
+                                , minion . series . map (symbol . return) $ trimmedRef
                                 , flank
                                 ]
   where refLength = length ref
         trimmedRef = drop flankSize . take (refLength - flankSize) $ ref
-        flank =  geometricRepeat (recip $ fromIntegral flankSize * avgEventsPerNT) (state "_")
+        flank =  geometricRepeat (recip $ fromIntegral flankSize * avgEventsPerNT) (symbol "_")
 
 noiseModel :: Int -> ProbSeq [NT]
-noiseModel size = geometricRepeat (recip . (avgEventsPerNT *) . fromIntegral $ size) (state "_")
+noiseModel size = geometricRepeat (recip . (avgEventsPerNT *) . fromIntegral $ size) (symbol "_")
 
 main = main''' >> return ()
 
@@ -158,9 +158,9 @@ alleleRefModel :: Int -> Int -> NT -> [NT] -> ProbSeq [NT]
 alleleRefModel edgeFlankSize loc alt ref = series [
     (noiseModel edgeFlankSize)
   , minion . series $ [
-        series . map (state . return) $ first
-      , eitherOr 0.5 (state [ref !! loc]) (state [alt])
-      , series . map (state . return) $ last
+        series . map (symbol . return) $ first
+      , eitherOr 0.5 (symbol [ref !! loc]) (symbol [alt])
+      , series . map (symbol . return) $ last
       ]
   , (noiseModel edgeFlankSize)
   ]
@@ -191,20 +191,23 @@ main''' = do
 
   let (flipped, regionFile, emissionsFile, referenceFile, outputFile) = case args of
         [flipped, regF, emiF, refF, outF] -> (flipped == "--flip", regF, emiF, refF, outF)
-        _ -> let dir = "test_data_bwd1/"
-                 regionFile = dir ++ "region.csv"
-                 emissionsFile = dir ++ "minion_post.csv"
-                 referenceFile = dir ++ "reference.txt"
-                 outputFile = dir ++ "output.csv"
+        _ -> let dir = "/mnt/ubuntu/home/ryan1/documents/smol/snp-calling/10-16/"
+                 regionFile = dir ++ "scrappie_events.region"
+                 emissionsFile = dir ++ "scrappie_events.post"
+                 referenceFile = dir ++ "scrappie_events.ref"
+                 outputFile = dir ++ "scrappie_events.probs"
              in (True, regionFile, emissionsFile, referenceFile, outputFile)
-
+ --flip albacore.region nanonet.post albacore.ref nanonet.probs
   (_, emissionsStart, emissionsEnd) <- readRegionFile regionFile
   (Right ems) <- readMinIONEmissions emissionsFile
 
-  let emissions' = addToken (1e-6) "_" ems
+  let emissions' = addToken (1e-6) "_" (expEmissions ems)
 
   ref <- readReference False referenceFile
 
+  print (length ref)
+  print (V.length . emissions $ emissions')
+  print (emissionsStart, emissionsEnd)
 
   let edgeFlankSize = 50
       sites = testSNPs edgeFlankSize 100 emissionsStart ref
@@ -218,13 +221,20 @@ main''' = do
       emissions'' = emissions' { emissions = V.map (normalize . regularize x) (emissions emissions') }
       --emissions'' = V.map (normalize . regularize x) emissions'
 
-
+  print "bf"
   densities <- runHMMSum' ixs emissions'' matSeq
+  print (length densities)
+  print "af"
   let probs = map head $ map (\v -> map (/ sum v) v) densities
       outputStr = unlines . map show $ probs
 
   putStrLn outputStr
   writeFile outputFile outputStr
+
+expEmissions :: Emissions a -> Emissions a
+expEmissions ems = ems { emissions = expVecMat (emissions ems) }
+  where expVecMat :: VecMat -> VecMat
+        expVecMat vm = V.map (V.map exp) vm
 
 
 fullSNPModel :: Bool -> (Int, Int) -> Int -> [NT] -> [(Int, NT, Prob)] -> ProbSeq [NT]
@@ -243,10 +253,10 @@ fullSNPModelOriented flankSize ref sites = series [
   ]
   where lastFirstSites = sortBy (compare `on` (\(a,_,_) -> -a)) sites
         ref' = drop flankSize . take (length ref - flankSize) $ ref
-        (before, regions') = foldl' nextRegion (map (state . return) ref', []) lastFirstSites
+        (before, regions') = foldl' nextRegion (map (symbol . return) ref', []) lastFirstSites
         nextRegion (reference, sofar) (locus, nt, p) =
           let (before, ref:after) = splitAt (locus - flankSize) reference
-          in (before, eitherOr (1-p) ref (state (return nt)) : series after : sofar)
+          in (before, eitherOr (1-p) ref (symbol (return nt)) : series after : sofar)
         regions = series before : regions'
 
 fullSNPModelIxs' :: Bool -> Vector StateTag -> [[Vector Int]]
@@ -292,10 +302,10 @@ fullSNPModelOrientedIxs flankSize ref sites =
         charPair c = toEnum $ (fromEnum (maxBound :: Char) - (fromEnum c))
         lastFirstSites = sortBy (compare `on` (\(a,_,_) -> -a)) sites'
         ref' = drop flankSize . take (length ref - flankSize) $ ref
-        (before, regions') = foldl' nextRegion (map (state . return) ref', []) lastFirstSites
+        (before, regions') = foldl' nextRegion (map (symbol . return) ref', []) lastFirstSites
         nextRegion (reference, sofar) (locus, nt, p) =
           let (before, ref:after) = splitAt (locus - flankSize) reference
-          in (before, eitherOr (1-p) (state (return (charPair nt))) (state (return nt)) : series after : sofar)
+          in (before, eitherOr (1-p) (symbol (return (charPair nt))) (symbol (return nt)) : series after : sofar)
         regions = series before : regions'
         matSeq = buildMatSeq $ series [
             noiseModel flankSize
@@ -692,7 +702,7 @@ cycleSeq = andThen
         nEnd = 20
 
 periodSeq :: ProbSeq Int
-periodSeq = series' . map (\v -> andThen (state v) skipDSeq) $
+periodSeq = series' . map (\v -> andThen (symbol v) skipDSeq) $
   [ 2, 1 ]
 
 skipD :: [Prob]
